@@ -241,8 +241,52 @@ function withDeadline(promise, ms, message) {
 }
 
 /* ---------------- 预警：广播给看板 + 可选外部推送 ---------------- */
-function staticRow(w) {
-  return workStaticRow(w);
+function staticRow(w, followerMap) {
+  var row = workStaticRow(w);
+  if (followerMap && w.authorId && followerMap[w.authorId] != null) {
+    row.author_followers = followerMap[w.authorId];
+  }
+  return row;
+}
+
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+/* 用 B站公开接口补全账号粉丝数（用于"≤10万粉小账号"筛选） */
+async function enrichFollowers(limit) {
+  var conf = config.followers || {};
+  if (conf.enabled === false) return 0;
+  var want = Math.max(0, Number(limit != null ? limit : (conf.perPoll || 60)));
+  if (!want) return 0;
+  var pending = store.accountsNeedingFollowers(want, 0, Date.now());
+  if (!pending.length) return 0;
+  var got = 0;
+  for (var i = 0; i < pending.length; i++) {
+    var a = pending[i];
+    if (a.platform !== 'bilibili' || !a.authorId) continue;
+    try {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, 12000);
+      var res;
+      try {
+        res = await fetch('https://api.bilibili.com/x/relation/stat?vmid=' + a.authorId, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
+            Referer: 'https://space.bilibili.com/' + a.authorId,
+            Accept: 'application/json'
+          },
+          signal: ctrl.signal
+        });
+      } finally { clearTimeout(timer); }
+      var json = await res.json();
+      if (json && json.code === 0 && json.data && json.data.follower != null) {
+        store.saveFollowers('bilibili', a.authorId, Number(json.data.follower), Date.now());
+        got++;
+      }
+    } catch (err) { /* 单个失败不影响整轮 */ }
+    await sleep(conf.delayMs || 120);
+  }
+  if (got) log('已补全 ' + got + ' 个账号的真实粉丝数');
+  return got;
 }
 
 /* 热榜数据（抖音/快手热搜等）：最新一次 + 上一次快照 + 每条的上榜历史 */
@@ -309,7 +353,8 @@ function writeStaticExport() {
   var rows = store.queryRange(from, to, []).sort(function (a, b) { return b.ts - a.ts; });
   var maxRows = Number(process.env.STATIC_MAX || 20000);
   if (rows.length > maxRows) rows = rows.slice(0, maxRows);
-  var works = rows.map(staticRow);
+  var followerMap = store.followerMap ? store.followerMap() : null;
+  var works = rows.map(function (w) { return staticRow(w, followerMap); });
   var meta = {
     generatedAt: Date.now(),
     generatedAtText: new Date().toISOString(),
@@ -414,6 +459,11 @@ async function pollOnce() {
     });
     var now = Date.now();
     var res = store.upsertWorks(rows, now);
+    try {
+      var accountRows = rows.filter(function (w) { return w.authorId; })
+        .map(function (w) { return { platform: w.platform, authorId: w.authorId, account: w.account }; });
+      if (accountRows.length && store.upsertAccountSeen) store.upsertAccountSeen(accountRows, now);
+    } catch (err) { log('记录账号失败：' + err.message); }
     state.lastPollAt = now;
     state.lastOk = true;
     state.lastError = '';
@@ -455,6 +505,14 @@ async function pollOnce() {
       }
       try { store.pruneTrends(Date.now() - 30 * 86400000); } catch (e) { /* ignore */ }
     }
+    // 补全粉丝数（每轮限量，避免请求过密）
+    try { await enrichFollowers(); } catch (err) { log('粉丝数补全失败：' + err.message); }
+    // 控制体积：只保留最近 STATIC_DAYS+1 天的作品
+    try {
+      var pruneBefore = normalize.shiftKey(normalize.dateKey(new Date()), -(STATIC_DAYS + 1));
+      var pruned = store.pruneWorks ? store.pruneWorks(pruneBefore) : 0;
+      if (pruned) log('已清理 ' + pruned + ' 条过期作品（早于 ' + pruneBefore + '）');
+    } catch (err) { /* ignore */ }
     scheduleNext(state.interval);
   } catch (err) {
     state.lastPollAt = Date.now();

@@ -6,6 +6,12 @@
   "adapter": "http",
   "intervalSeconds": 300,
   "daysBack": 3,
+  "_粉丝数": "用 B站公开接口补全账号真实粉丝数，用于筛选 10 万粉以下的小账号",
+  "followers": {
+    "enabled": true,
+    "perPoll": 60,
+    "delayMs": 120
+  },
   "timeoutMs": 20000,
   "pollTimeoutMs": 120000,
   "headers": {
@@ -46,6 +52,42 @@
       "itemsPath": "data.archives",
       "pages": 2,
       "filter": { "minViews": 100 }
+    },
+    {
+      "_说明": "定向抓小账号集中的分区：知识/科技（学习资料）、游戏、舞蹈（颜值）、时尚（穿搭美妆）、资讯（赚钱/搞钱类）",
+      "name": "B站·知识科技最新",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=36&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 3,
+      "filter": { "minViews": 80 }
+    },
+    {
+      "name": "B站·游戏最新",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=4&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 2,
+      "filter": { "minViews": 80 }
+    },
+    {
+      "name": "B站·舞蹈最新",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=129&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 2,
+      "filter": { "minViews": 80 }
+    },
+    {
+      "name": "B站·时尚最新",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=155&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 2,
+      "filter": { "minViews": 80 }
+    },
+    {
+      "name": "B站·资讯最新",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=202&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 2,
+      "filter": { "minViews": 80 }
     }
   ],
   "trends": [

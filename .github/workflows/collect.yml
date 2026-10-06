@@ -28,7 +28,7 @@ jobs:
     env:
       # 默认用免密钥的 B站公开接口；换成你自己的数据源见 README「GitHub 部署」一节
       CONFIG_FILE: config.all.json
-      STATIC_DAYS: '30'
+      STATIC_DAYS: '7'
       NODE_OPTIONS: --no-warnings
       TZ: Asia/Shanghai
       # 有自己接口时：把密钥存到仓库 Secrets，然后取消下面几行注释

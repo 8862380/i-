@@ -62,7 +62,17 @@ function openSqlite(file) {
     '  url TEXT',
     ');',
     'CREATE INDEX IF NOT EXISTS idx_trends_lookup ON trend_snapshots(platform, captured_at);',
-    'CREATE INDEX IF NOT EXISTS idx_trends_title ON trend_snapshots(platform, title);'
+    'CREATE INDEX IF NOT EXISTS idx_trends_title ON trend_snapshots(platform, title);',
+    'CREATE TABLE IF NOT EXISTS accounts (',
+    '  platform TEXT NOT NULL,',
+    '  author_id TEXT NOT NULL,',
+    '  account TEXT,',
+    '  followers INTEGER,',
+    '  works_count INTEGER DEFAULT 0,',
+    '  last_seen INTEGER,',
+    '  updated_at INTEGER,',
+    '  PRIMARY KEY (platform, author_id)',
+    ');'
   ].join('\n'));
   // 老库补列（升级时不用重建数据库）
   var cols = db.prepare('PRAGMA table_info(works)').all().map(function (c) { return c.name; });
@@ -218,14 +228,55 @@ function openSqlite(file) {
         };
       });
     },
+    /* 账号表：作品里出现的作者 + 粉丝数（粉丝数靠公开接口补全） */
+    upsertAccountSeen: function (rows, now) {
+      var stmt = db.prepare('INSERT INTO accounts (platform, author_id, account, works_count, last_seen, updated_at) VALUES (?, ?, ?, 1, ?, 0) ' +
+        'ON CONFLICT(platform, author_id) DO UPDATE SET account = excluded.account, works_count = works_count + 1, last_seen = excluded.last_seen');
+      var n = 0;
+      db.exec('BEGIN');
+      try {
+        rows.forEach(function (r) { stmt.run(r.platform, r.authorId, r.account, now); n++; });
+        db.exec('COMMIT');
+      } catch (err) { db.exec('ROLLBACK'); throw err; }
+      return n;
+    },
+    accountsNeedingFollowers: function (limit, staleMs, now) {
+      return db.prepare('SELECT platform, author_id, account FROM accounts WHERE platform = ? ' +
+        'AND followers IS NULL AND last_seen >= ? ORDER BY works_count DESC, last_seen DESC LIMIT ?')
+        .all('bilibili', now - 3 * 86400000, limit)
+        .map(function (r) { return { platform: r.platform, authorId: r.author_id, account: r.account }; });
+    },
+    saveFollowers: function (platform, authorId, followers, now) {
+      db.prepare('UPDATE accounts SET followers = ?, updated_at = ? WHERE platform = ? AND author_id = ?')
+        .run(followers, now, platform, authorId);
+    },
+    followerMap: function () {
+      var map = {};
+      db.prepare('SELECT author_id, followers FROM accounts WHERE followers IS NOT NULL').all()
+        .forEach(function (r) { map[r.author_id] = r.followers; });
+      return map;
+    },
+    accountStats: function () {
+      var s = db.prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN followers IS NOT NULL THEN 1 ELSE 0 END) AS known, ' +
+        'SUM(CASE WHEN followers IS NOT NULL AND followers <= 100000 THEN 1 ELSE 0 END) AS small FROM accounts').get();
+      return { total: Number(s.total || 0), known: Number(s.known || 0), small: Number(s.small || 0) };
+    },
     pruneTrends: function (beforeTs) {
       var info = db.prepare('DELETE FROM trend_snapshots WHERE captured_at < ?').run(beforeTs);
       return info && info.changes ? info.changes : 0;
+    },
+    /* 只保留最近若干天的作品，避免定向抓取小账号后数据无限膨胀 */
+    pruneWorks: function (beforeKey) {
+      var info = db.prepare('DELETE FROM works WHERE date_key < ?').run(beforeKey);
+      var n = info && info.changes ? info.changes : 0;
+      if (n) { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) { /* ignore */ } }
+      return n;
     },
     clearAll: function () {
       db.exec('DELETE FROM works');
       db.exec('DELETE FROM polls');
       db.exec('DELETE FROM trend_snapshots');
+      db.exec('DELETE FROM accounts');
       return true;
     },
     close: function () { try { db.close(); } catch (e) { /* ignore */ } }
@@ -237,9 +288,11 @@ function openJson(dir) {
   var worksFile = path.join(dir, 'works.json');
   var pollsFile = path.join(dir, 'polls.json');
   var trendsFile = path.join(dir, 'trends.json');
+  var accountsFile = path.join(dir, 'accounts.json');
   var map = new Map();
   var polls = [];
   var trends = [];
+  var accounts = {};
   var dirty = false;
   var timer = null;
 
@@ -254,6 +307,9 @@ function openJson(dir) {
   if (fs.existsSync(trendsFile)) {
     try { trends = JSON.parse(fs.readFileSync(trendsFile, 'utf8')) || []; } catch (e) { trends = []; }
   }
+  if (fs.existsSync(accountsFile)) {
+    try { accounts = JSON.parse(fs.readFileSync(accountsFile, 'utf8')) || {}; } catch (e) { accounts = {}; }
+  }
 
   function flush() {
     if (!dirty) return;
@@ -265,6 +321,8 @@ function openJson(dir) {
     fs.renameSync(pollsFile + '.tmp', pollsFile);
     fs.writeFileSync(trendsFile + '.tmp', JSON.stringify(trends.slice(-2000)), 'utf8');
     fs.renameSync(trendsFile + '.tmp', trendsFile);
+    fs.writeFileSync(accountsFile + '.tmp', JSON.stringify(accounts), 'utf8');
+    fs.renameSync(accountsFile + '.tmp', accountsFile);
   }
   function schedule() {
     dirty = true;
@@ -382,16 +440,66 @@ function openJson(dir) {
         };
       });
     },
+    upsertAccountSeen: function (rows, now) {
+      rows.forEach(function (r) {
+        var k = r.platform + '|' + r.authorId;
+        var a = accounts[k] || (accounts[k] = { platform: r.platform, authorId: r.authorId, account: r.account, followers: null, works: 0, lastSeen: 0, updatedAt: 0 });
+        a.account = r.account;
+        a.works++;
+        a.lastSeen = now;
+      });
+      schedule();
+      return rows.length;
+    },
+    accountsNeedingFollowers: function (limit, staleMs, now) {
+      return Object.keys(accounts).map(function (k) { return accounts[k]; })
+        .filter(function (a) { return a.platform === 'bilibili' && a.followers == null && a.lastSeen >= now - 3 * 86400000; })
+        .sort(function (x, y) { return y.works - x.works || y.lastSeen - x.lastSeen; })
+        .slice(0, limit)
+        .map(function (a) { return { platform: a.platform, authorId: a.authorId, account: a.account }; });
+    },
+    saveFollowers: function (platform, authorId, followers, now) {
+      var a = accounts[platform + '|' + authorId];
+      if (!a) return;
+      a.followers = followers;
+      a.updatedAt = now;
+      schedule();
+    },
+    followerMap: function () {
+      var out = {};
+      Object.keys(accounts).forEach(function (k) {
+        if (accounts[k].followers != null) out[accounts[k].authorId] = accounts[k].followers;
+      });
+      return out;
+    },
+    accountStats: function () {
+      var all = Object.keys(accounts).map(function (k) { return accounts[k]; });
+      var known = all.filter(function (a) { return a.followers != null; });
+      return {
+        total: all.length,
+        known: known.length,
+        small: known.filter(function (a) { return a.followers <= 100000; }).length
+      };
+    },
     pruneTrends: function (beforeTs) {
       var before = trends.length;
       trends = trends.filter(function (s) { return s.capturedAt >= beforeTs; });
       if (trends.length !== before) schedule();
       return before - trends.length;
     },
+    pruneWorks: function (beforeKey) {
+      var before = map.size;
+      Array.from(map.keys()).forEach(function (k) {
+        if (map.get(k).dateKey < beforeKey) map.delete(k);
+      });
+      if (map.size !== before) schedule();
+      return before - map.size;
+    },
     clearAll: function () {
       map.clear();
       polls = [];
       trends = [];
+      accounts = {};
       dirty = true;
       flush();
       return true;

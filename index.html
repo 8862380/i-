@@ -269,6 +269,7 @@
     <button class="tab" type="button" role="tab" data-tab="tracks" aria-selected="false">赛道分析</button>
     <button class="tab" type="button" role="tab" data-tab="audience" aria-selected="false">人群与需求</button>
     <button class="tab" type="button" role="tab" data-tab="trends" aria-selected="false">平台热榜</button>
+    <button class="tab" type="button" role="tab" data-tab="niche" aria-selected="false">小账号·资源号</button>
   </nav>
 
   <section class="tabpanel" id="panel-overview">
@@ -460,6 +461,54 @@
   </section>
 
   <!-- ============ 板块五：平台热榜（抖音 / 快手） ============ -->
+  <!-- ============ 板块：小账号 · 资源号（≤10万粉 + 学习/赚钱/游戏/美女） ============ -->
+  <section class="tabpanel" id="panel-niche" hidden>
+    <div class="grid">
+      <section class="panel span3">
+        <div class="p-head">
+          <h2 class="p-title">小账号 · 资源号监控</h2>
+          <div class="t-tools">
+            <select id="nicheCat" aria-label="内容分类">
+              <option value="all">全部分类</option>
+              <option value="study">学习资料</option>
+              <option value="money">赚钱资源</option>
+              <option value="game">游戏</option>
+              <option value="beauty">美女</option>
+              <option value="other">其他</option>
+            </select>
+            <select id="nicheFan" aria-label="粉丝区间">
+              <option value="100000">≤10万粉（小账号）</option>
+              <option value="10000">≤1万粉（新号）</option>
+              <option value="300000">≤30万粉</option>
+              <option value="0">不限粉丝</option>
+            </select>
+            <button class="btn" id="nicheWatchedOnly" type="button" aria-pressed="false">只看对标</button>
+          </div>
+        </div>
+        <div class="hint" id="nicheHint"></div>
+        <div class="boards" id="nicheCats"></div>
+      </section>
+      <section class="panel span3">
+        <div class="p-head"><h2 class="p-title">小账号榜（按播放/粉丝比排序）</h2><span class="p-note" id="nicheCount"></span></div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>对标</th><th>账号</th><th>分类</th><th class="num">粉丝</th><th class="num">作品数</th>
+                <th class="num">总播放</th><th class="num">中位播放</th><th class="num">最高播放</th>
+                <th class="num">播放/粉丝</th><th class="num">爆款率</th><th>主页</th>
+              </tr>
+            </thead>
+            <tbody id="nicheBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel span3">
+        <div class="p-head"><h2 class="p-title">套路词（标题里反复出现、且播放更好的词）</h2><span class="p-note">按当前筛选自动计算</span></div>
+        <div class="pills" id="nichePills"></div>
+      </section>
+    </div>
+  </section>
   <section class="tabpanel" id="panel-trends" hidden>
     <section class="panel">
       <div class="p-head">
@@ -824,6 +873,7 @@
       platform: pid,
       account: String(pick(raw, ['account', 'author', 'nickname', '账号', '作者', '达人']) || '未标注账号'),
       authorId: String(pick(raw, ['author_id', 'authorId', 'mid', 'uid', '达人id']) || ''),
+      followers: toNumber(pick(raw, ['author_followers', 'followers', 'fans_count', '粉丝数'])) || null,
       title: String(pick(raw, ['title', 'desc', 'content', '标题', '文案']) || '(无标题)'),
       tags: tags,
       hour: dt.getHours(),
@@ -1611,6 +1661,41 @@
       trendState.day = this.value;
       renderTrends();
     });
+    var nicheCat = document.getElementById('nicheCat');
+    if (nicheCat) nicheCat.addEventListener('change', function () {
+      nicheState.cat = this.value;
+      renderNiche();
+    });
+    var nicheFan = document.getElementById('nicheFan');
+    if (nicheFan) nicheFan.addEventListener('change', function () {
+      nicheState.fanMax = Number(this.value) || 0;
+      renderNiche();
+    });
+    var nicheWatched = document.getElementById('nicheWatchedOnly');
+    if (nicheWatched) nicheWatched.addEventListener('click', function () {
+      nicheState.watchedOnly = !nicheState.watchedOnly;
+      this.setAttribute('aria-pressed', String(nicheState.watchedOnly));
+      renderNiche();
+    });
+    var nicheBody = document.getElementById('nicheBody');
+    if (nicheBody) nicheBody.addEventListener('click', function (ev) {
+      var star = ev.target.closest ? ev.target.closest('[data-watch]') : null;
+      if (star) {
+        ev.preventDefault();
+        var key = star.getAttribute('data-watch');
+        var i = watchlist.indexOf(key);
+        if (i >= 0) watchlist.splice(i, 1); else watchlist.push(key);
+        saveWatchlist();
+        renderNiche();
+        return;
+      }
+      var link = ev.target.closest ? ev.target.closest('[data-acct]') : null;
+      if (link) {
+        ev.preventDefault();
+        switchTab('accounts');
+        renderAccountDetail(link.getAttribute('data-acct'));
+      }
+    });
     $('#dateInput').value = state.date;
     $('#dateInput').addEventListener('change', function () {
       state.date = this.value || dateKey(new Date());
@@ -1893,6 +1978,7 @@
       a.list.sort(function (x, y) { return y.views - x.views; });
       a.profileUrl = profileUrl(a.list[0]);
       a.watched = watchlist.indexOf(a.key) >= 0;
+      a.followers = a.list.reduce(function (v, w) { return v != null ? v : (w.followers != null ? w.followers : null); }, null);
       return a;
     }).sort(function (x, y) { return y.views - x.views; });
   }
@@ -2388,6 +2474,120 @@
   }
 
   /* ---------- 平台热榜（抖音 / 快手热搜，真实数据） ---------- */
+  /* ---------- 小账号 · 资源号（≤10万粉 + 学习/赚钱/游戏/美女） ---------- */
+  var NICHE_CATS = [
+    { key: 'study', name: '学习资料',
+      tnames: ['知识', '校园学习', '科学科普', '人文历史', '社科·法律·心理', '职业职场', '科技', '数码', '教育', '外语', '升学考试'],
+      words: ['教程', '资料', '笔记', '学习', '考研', '考公', '四六级', '英语', '单词', '数学', '物理', '化学', '编程', 'python', 'java',
+        'ps教程', 'ppt', 'excel', 'office', '论文', '期末', '高考', '中考', '刷题', '真题', '网课', '课程', '自学', '干货', '零基础',
+        '题解', '知识点', '背诵', '单词表', '语法', '口语'] },
+    { key: 'money', name: '赚钱资源',
+      tnames: ['财经商业', '职业职场', '资讯', '社会'],
+      words: ['赚钱', '副业', '兼职', '变现', '引流', '项目', '接单', '带货', '电商', '无货源', '日入', '月入', '搞钱', '创业',
+        '被动收入', '素材', '资源', '合集', '代理', '私域', '流量', '涨粉', '运营', '开号', '搬砖', '信息差'] },
+    { key: 'game', name: '游戏',
+      tnames: ['单机游戏', '手机游戏', '网络游戏', '电子竞技', '游戏赛事', '桌游棋牌', '音游', '怀旧游戏', 'GMV'],
+      words: ['游戏', '攻略', '上分', '开黑', '手游', '端游', '王者', '和平精英', '原神', '我的世界', 'steam', '联机', '通关',
+        '速通', '脚本', '辅助', '私服', 'gm', '福利', '礼包', '兑换码', '存档'] },
+    { key: 'beauty', name: '美女',
+      tnames: ['舞蹈', '时尚', '美妆护肤', '颜值', '穿搭', '模特', '生活娱乐'],
+      words: ['美女', '颜值', '小姐姐', '穿搭', '舞蹈', '身材', '写真', '模特', '网红', '可爱', '甜妹', '御姐', 'jk', '汉服',
+        '美妆', '化妆', '变装', '擦边', '心动', '女神'] }
+  ];
+  var NICHE_NAME = { study: '学习资料', money: '赚钱资源', game: '游戏', beauty: '美女', other: '其他' };
+  function classifyNiche(w) {
+    var title = String(w.title || '');
+    var tags = (w.tags || []).join(' ');
+    var best = null;
+    NICHE_CATS.forEach(function (c) {
+      var score = 0;
+      c.tnames.forEach(function (t) { if (tags.indexOf(t) >= 0) score += 3; });
+      c.words.forEach(function (k) { if (title.indexOf(k) >= 0) score += 1; });
+      if (score > 0 && (!best || score > best.score)) best = { key: c.key, name: c.name, score: score };
+    });
+    return best || { key: 'other', name: '其他', score: 0 };
+  }
+  var nicheState = { cat: 'all', fanMax: 100000, watchedOnly: false, accounts: [] };
+  function nicheWorks() {
+    var works = analysisWorks();
+    var fanMax = nicheState.fanMax;
+    return works.filter(function (w) {
+      if (nicheState.cat !== 'all' && classifyNiche(w).key !== nicheState.cat) return false;
+      if (fanMax > 0) {
+        if (w.followers == null) return false;      // 粉丝数未知的先不算，避免误判
+        if (w.followers > fanMax) return false;
+      }
+      if (nicheState.watchedOnly && watchlist.indexOf(accountKeyOf(w)) < 0) return false;
+      return true;
+    });
+  }
+  function renderNiche() {
+    if (!view) return;
+    var all = analysisWorks();
+    var works = nicheWorks();
+    var known = all.filter(function (w) { return w.followers != null; }).length;
+    var byCat = {};
+    works.forEach(function (w) {
+      var c = classifyNiche(w);
+      var o = byCat[c.key] || (byCat[c.key] = { key: c.key, name: c.name, works: 0, views: 0, authors: {}, viewList: [] });
+      o.works++; o.views += w.views; o.viewList.push(w.views);
+      var ak = accountKeyOf(w);
+      var au = o.authors[ak] || (o.authors[ak] = { name: w.account, works: 0, views: 0 });
+      au.works++;
+      au.views += w.views;
+    });
+    var cats = NICHE_CATS.map(function (c) { return byCat[c.key] || { key: c.key, name: c.name, works: 0, views: 0, authors: {}, viewList: [] }; });
+    if (byCat.other) cats.push(byCat.other);
+    $('#nicheCats').innerHTML = cats.map(function (o) {
+      var accs = Object.keys(o.authors).length;
+      var median = medianOf(o.viewList);
+      var top = Object.keys(o.authors).sort(function (a, b) { return o.authors[b].views - o.authors[a].views; }).slice(0, 3)
+        .map(function (k) { return o.authors[k].name; });
+      return '<div class="board"><div class="board-head"><div class="board-title">' + o.name + '</div>' +
+        '<div class="board-meta">' + o.works + ' 条 ｜ ' + accs + ' 个账号 ｜ 中位播放 ' + fmtNum(median) + '</div></div>' +
+        '<div class="tmeta" style="padding:0 4px">' + (top.length ? '代表账号：' + top.join('、') : '样本不足') + '</div></div>';
+    }).join('');
+
+    var accs = buildAccounts(works).filter(function (a) {
+      if (nicheState.fanMax > 0 && (a.followers == null || a.followers > nicheState.fanMax)) return false;
+      return true;
+    });
+    accs.forEach(function (a) {
+      a.efficiency = a.followers ? a.views / a.followers : (a.views / 100000);
+      var ws = works.filter(function (w) { return accountKeyOf(w) === a.key; });
+      a.niche = ws.length ? classifyNiche(ws[0]).name : '—';
+    });
+    accs.sort(function (x, y) { return y.efficiency - x.efficiency; });
+    nicheState.accounts = accs;
+    $('#nicheBody').innerHTML = accs.slice(0, 60).map(function (a) {
+      return '<tr>' +
+        '<td><button class="star' + (a.watched ? ' on' : '') + '" type="button" data-watch="' + a.key + '">' + (a.watched ? '★' : '☆') + '</button></td>' +
+        '<td><a href="#" class="linkish" data-acct="' + a.key + '">' + a.account + '</a></td>' +
+        '<td class="acct">' + a.niche + '</td>' +
+        '<td class="num">' + (a.followers != null ? fmtNum(a.followers) : '未知') + '</td>' +
+        '<td class="num">' + a.works + '</td>' +
+        '<td class="num">' + fmtNum(a.views) + '</td>' +
+        '<td class="num">' + fmtNum(a.medianViews) + '</td>' +
+        '<td class="num">' + fmtNum(a.maxViews) + '</td>' +
+        '<td class="num"><b>' + a.efficiency.toFixed(1) + '×</b></td>' +
+        '<td class="num">' + (a.hitRate * 100).toFixed(0) + '%</td>' +
+        '<td>' + (a.profileUrl ? '<a class="linkish" href="' + a.profileUrl + '" target="_blank" rel="noopener">B站主页</a>' : '—') + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="11"><p class="empty">当前筛选下还没有查到小账号数据。粉丝数是靠公开接口逐个补全的（每轮 60 个），多跑几轮覆盖会更全；也可以把粉丝区间放宽试试。</p></td></tr>';
+    $('#nicheCount').textContent = '共 ' + accs.length + ' 个账号 ｜ 作品 ' + works.length + ' 条 ｜ 全池已补全粉丝数 ' + known + ' 条作品';
+    $('#nicheHint').innerHTML = '这个板块专门盯<b>小账号 / 资源号</b>：粉丝先按 B站公开接口补全真实数据，再按你的四个方向分类（' +
+      NICHE_CATS.map(function (c) { return c.name; }).join(' / ') + '）。' +
+      '<b>播放/粉丝比</b>越高说明越"以小博大"，适合当对标对象；「套路词」是这类账号标题里反复出现且播放更好的词。' +
+      (nicheState.fanMax > 0 ? ' 当前只看 <b>' + fmtNum(nicheState.fanMax) + ' 粉以下</b>的账号。' : ' 当前不限粉丝。') +
+      '（抖音、快手没有公开的账号粉丝接口，所以这部分是小账号监控只覆盖有作品级数据的 B站；要盯抖音/快手的资源号需要开放平台授权。）';
+
+    var kws = extractKeywords(works).slice(0, 16);
+    $('#nichePills').innerHTML = kws.map(function (o) {
+      return '<span class="pill' + (o.ratio >= 1.5 ? ' hot' : '') + '"><b>' + o.word + '</b>' +
+        '<span class="pi">' + o.works + ' 条 · 中位 ' + fmtNum(o.medianViews) + ' · ' + o.ratio.toFixed(2) + '×</span></span>';
+    }).join('') || '<p class="empty">当前筛选下样本太少，换个分类或放宽粉丝区间</p>';
+  }
+
   var trendState = { data: null, loadedAt: 0 };
   var TREND_ORDER = { douyin: 0, kuaishou: 1, xhs: 2, bilibili: 8, shipinhao: 9 };
   var TREND_NAME = { douyin: '抖音', kuaishou: '快手', xhs: '小红书', bilibili: 'B站', shipinhao: '视频号' };
@@ -2515,7 +2715,7 @@
       b.classList[on ? 'add' : 'remove']('active');
       b.setAttribute('aria-selected', String(on));
     });
-    ['overview', 'daily', 'accounts', 'tracks', 'audience', 'trends'].forEach(function (t) {
+    ['overview', 'daily', 'accounts', 'tracks', 'audience', 'trends', 'niche'].forEach(function (t) {
       var p = document.getElementById('panel-' + t);
       if (p) p.hidden = (t !== name);
     });
@@ -2523,7 +2723,8 @@
     else if (name === 'trends') {
       renderTrends();
       loadTrends();
-    } else renderAnalysis();
+    } else if (name === 'niche') renderNiche();
+    else renderAnalysis();
   }
   function lsRow(k, v, cls) {
     return '<div class="ls-row"><span class="ls-k">' + k + '</span><span class="ls-v ' +
