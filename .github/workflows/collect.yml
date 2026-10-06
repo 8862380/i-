@@ -59,16 +59,19 @@ jobs:
             echo "数据没有变化，跳过提交"
             exit 0
           fi
-          COUNT=$(node -e "console.log(require('./data/meta.json').count)")
-          git commit -m "data: 更新采集数据（${COUNT} 条作品）"
-          # 其他推送（例如手动更新代码）可能同时落到 main，冲突时先 rebase 再重试
+          # 数据文件每轮都是重新生成的，所以冲突时直接以"远端最新 + 我们刚生成的数据"重做一次提交，
+          # 这样永远是快进推送，多次工作流并发也不会互相顶掉。
           for i in 1 2 3 4; do
+            COUNT=$(node -e "console.log(require('./data/meta.json').count)")
+            git commit -m "data: 更新采集数据（${COUNT} 条作品）" || true
             if git push; then
               echo "✓ 数据已提交回仓库（第 ${i} 次尝试）"
               exit 0
             fi
-            echo "推送被拒绝，拉取远端后重试（第 ${i} 次）"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || true
+            echo "推送被拒绝，同步远端后重试（第 ${i} 次）"
+            git fetch origin "${GITHUB_REF_NAME:-main}"
+            git reset --soft FETCH_HEAD
+            git add -A data/
             sleep 5
           done
           echo "::error::数据推送失败。请确认 Settings → Actions → General → Workflow permissions 已选 Read and write permissions。"
