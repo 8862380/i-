@@ -1,0 +1,18 @@
+services:
+  monitor:
+    build: .
+    container_name: media-monitor
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      ADAPTER: "${ADAPTER:-file}"
+      INTERVAL: "${INTERVAL:-300}"
+      INGEST_TOKEN: "${INGEST_TOKEN:-}"
+    volumes:
+      - ./realtime/data:/app/realtime/data
+      # 想用 config.json（而不是环境变量）配置数据源时，先创建文件再放开这一行：
+      #   copy realtime\config.example.json realtime\config.json
+      # - ./realtime/config.json:/app/realtime/config.json:ro

@@ -1,0 +1,11 @@
+{
+  "_说明": "联调用配置：先用自检数据源验证「采集 → 入库 → 实时推送 → 看板刷新」整条链路是否通。",
+  "port": 8787,
+  "host": "0.0.0.0",
+  "adapter": "http",
+  "url": "http://127.0.0.1:8899/api/works?date={date}&page={page}",
+  "itemsPath": "data.list",
+  "pages": 2,
+  "intervalSeconds": 60,
+  "ingestToken": ""
+}

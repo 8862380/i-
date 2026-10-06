@@ -1,0 +1,108 @@
+{
+  "_说明": "三平台真实数据（全部免密钥）：B站真实作品（热门+排行+最新投稿）+ 抖音热榜 + 快手热榜",
+  "_口径": "B站给的是作品级数据（播放/点赞/评论/收藏/分享，可做账号和赛道分析）；抖音、快手给的是官方公开热榜（词条+热度值，可看排名变化和热度增速）",
+  "port": 8787,
+  "host": "127.0.0.1",
+  "adapter": "http",
+  "intervalSeconds": 300,
+  "daysBack": 3,
+  "timeoutMs": 20000,
+  "pollTimeoutMs": 120000,
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Referer": "https://www.bilibili.com/",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "map": {
+    "platform": { "value": "bilibili" },
+    "id": "bvid",
+    "account": "owner.name",
+    "author_id": "owner.mid",
+    "title": "title",
+    "tags": ["tname"],
+    "publish_time": { "path": "pubdate", "type": "unix" },
+    "views": { "path": "stat.view", "default": 0 },
+    "likes": { "path": "stat.like", "default": 0 },
+    "comments": { "path": "stat.reply", "default": 0 },
+    "shares": { "path": "stat.share", "default": 0 },
+    "collects": { "path": "stat.favorite", "default": 0 }
+  },
+  "sources": [
+    {
+      "name": "B站热门视频",
+      "url": "https://api.bilibili.com/x/web-interface/popular?ps=50&pn={page}",
+      "itemsPath": "data.list",
+      "pages": 3
+    },
+    {
+      "name": "B站全站排行",
+      "url": "https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all",
+      "itemsPath": "data.list",
+      "pages": 1
+    },
+    {
+      "name": "B站最新投稿",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=0&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 2,
+      "filter": { "minViews": 100 }
+    }
+  ],
+  "trends": [
+    {
+      "name": "抖音热榜",
+      "platform": "douyin",
+      "listKey": "hot",
+      "url": "https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/",
+      "itemsPath": "word_list",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://www.douyin.com/",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "map": {
+        "title": "word",
+        "hot_value": { "path": "hot_value", "type": "number" }
+      }
+    },
+    {
+      "name": "快手热榜",
+      "platform": "kuaishou",
+      "listKey": "hot",
+      "url": "https://www.kuaishou.com/graphql",
+      "method": "POST",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Origin": "https://www.kuaishou.com",
+        "Referer": "https://www.kuaishou.com/"
+      },
+      "body": {
+        "operationName": "visionHotRank",
+        "variables": { "page": "hot" },
+        "query": "query visionHotRank($page: String) { visionHotRank(page: $page) { result items { id name hotValue rank } } }"
+      },
+      "itemsPath": "data.visionHotRank.items",
+      "map": {
+        "title": "name",
+        "hot_value": "hotValue",
+        "rank": { "path": "rank", "type": "number" }
+      }
+    }
+  ],
+  "ingestToken": "",
+  "publicUrl": "http://localhost:8787/",
+  "notify": {
+    "enabled": false,
+    "format": "wecom",
+    "webhook": "",
+    "minIntervalSeconds": 600,
+    "cooldownSeconds": 3600,
+    "rules": {
+      "dropRate": 0.3,
+      "spikeRate": 0.6,
+      "engagementChange": 0.25,
+      "viralTimes": 20,
+      "lowEffShare": 0.35
+    }
+  }
+}

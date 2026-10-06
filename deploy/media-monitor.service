@@ -1,0 +1,27 @@
+[Unit]
+Description=Media Monitor collector (content data monitoring dashboard)
+Documentation=file:/opt/media-monitor/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=media
+Group=media
+WorkingDirectory=/opt/media-monitor/realtime
+EnvironmentFile=-/opt/media-monitor/deploy/.env
+ExecStart=/usr/bin/node /opt/media-monitor/realtime/server.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/media-monitor/server.log
+StandardError=append:/var/log/media-monitor/server.log
+
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/media-monitor/realtime/data /var/log/media-monitor
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,66 @@
+name: 采集数据并更新看板
+
+# 定时采集：GitHub Actions 当采集器，数据提交回仓库，Pages 直接展示。
+# cron 用的是 UTC 时间；*/30 表示每 30 分钟一次。
+# 私有仓库建议改成每小时（0 * * * *），避免消耗完每月 2000 分钟免费额度；公开仓库不限量。
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+    # - cron: '0 * * * *'      # 每小时一次（私有仓库推荐）
+  workflow_dispatch:            # 也支持在 Actions 页面手动点一次
+  push:
+    branches: [main]
+    paths:
+      - 'realtime/**'
+      - '.github/workflows/collect.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # 默认用免密钥的 B站公开接口；换成你自己的数据源见 README「GitHub 部署」一节
+      CONFIG_FILE: config.all.json
+      STATIC_DAYS: '30'
+      NODE_OPTIONS: --no-warnings
+      TZ: Asia/Shanghai
+      # 有自己接口时：把密钥存到仓库 Secrets，然后取消下面几行注释
+      # ADAPTER: http
+      # URL: ${{ secrets.DATA_URL }}
+      # AUTH_HEADER: ${{ secrets.DATA_AUTH }}
+      # INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+      # NOTIFY_ENABLED: 'true'
+      # NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 采集一轮并导出静态数据
+        working-directory: realtime
+        run: node server.js --once --export
+
+      - name: 提交数据变更
+        run: |
+          git config user.name  "media-monitor-bot"
+          git config user.email "media-monitor-bot@users.noreply.github.com"
+          git add data/works.json data/meta.json
+          if git diff --cached --quiet; then
+            echo "数据没有变化，跳过提交"
+          else
+            COUNT=$(node -e "console.log(require('./data/meta.json').count)")
+            git commit -m "data: 更新采集数据（${COUNT} 条作品）"
+            if ! git push; then
+              echo "::error::提交数据失败。请到仓库 Settings → Actions → General → Workflow permissions 选择 Read and write permissions，然后重新运行本工作流。"
+              exit 1
+            fi
+          fi

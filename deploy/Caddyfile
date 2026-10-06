@@ -1,0 +1,19 @@
+# 用 Caddy 最省事：自动申请并续期 HTTPS 证书，不用自己配 certbot
+# 用法：caddy run --config Caddyfile --adapter caddyfile
+
+monitor.example.com {
+    reverse_proxy 127.0.0.1:8787 {
+        # SSE 实时推送：关闭响应缓冲，保持长连接
+        flush_interval -1
+    }
+    encode gzip
+    header X-Content-Type-Options nosniff
+}
+
+# 只想 IP 访问、不要域名时用这段（浏览器会提示证书不受信任，内部用足够）
+# :8443 {
+#     reverse_proxy 127.0.0.1:8787 {
+#         flush_interval -1
+#     }
+#     tls internal
+# }

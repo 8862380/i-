@@ -1,0 +1,10 @@
+# 定时备份配置（数据文件在 realtime/data/backups，默认保留 14 份）
+#
+# Linux（crontab -e，每天 3 点备份）：
+#   0 3 * * * cd /opt/media-monitor/realtime && /usr/bin/node tools/backup.js 14 >> /var/log/media-monitor/backup.log 2>&1
+#
+# Windows（任务计划程序 → 创建基本任务，每天 3:00，程序填 node，参数填下面这行）：
+#   "C:\path\to\media-monitor\realtime\tools\backup.js" 14
+#
+# Docker（在宿主机 crontab 里执行）：
+#   0 3 * * * docker exec media-monitor node /app/realtime/tools/backup.js 14

@@ -1,0 +1,67 @@
+{
+  "_说明": "免密钥的真实数据源：B站公开接口（热门视频 + 全站排行 + 最新投稿）。启动： realtime\\start.bat bilibili",
+  "_字段": "map 把接口返回结构翻译成内部字段；sources 里每个源共用这份 map，多源结果按作品 ID 去重合并",
+  "port": 8787,
+  "host": "127.0.0.1",
+  "adapter": "http",
+  "intervalSeconds": 300,
+  "daysBack": 3,
+  "timeoutMs": 20000,
+  "pollTimeoutMs": 120000,
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Referer": "https://www.bilibili.com/",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "map": {
+    "platform": { "value": "bilibili" },
+    "id": "bvid",
+    "account": "owner.name",
+    "author_id": "owner.mid",
+    "title": "title",
+    "tags": ["tname"],
+    "publish_time": { "path": "pubdate", "type": "unix" },
+    "views": { "path": "stat.view", "default": 0 },
+    "likes": { "path": "stat.like", "default": 0 },
+    "comments": { "path": "stat.reply", "default": 0 },
+    "shares": { "path": "stat.share", "default": 0 },
+    "collects": { "path": "stat.favorite", "default": 0 }
+  },
+  "sources": [
+    {
+      "name": "B站热门视频",
+      "url": "https://api.bilibili.com/x/web-interface/popular?ps=50&pn={page}",
+      "itemsPath": "data.list",
+      "pages": 3
+    },
+    {
+      "name": "B站全站排行",
+      "url": "https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all",
+      "itemsPath": "data.list",
+      "pages": 1
+    },
+    {
+      "name": "B站最新投稿",
+      "url": "https://api.bilibili.com/x/web-interface/newlist?rid=0&type=0&ps=50&pn={page}",
+      "itemsPath": "data.archives",
+      "pages": 2,
+      "filter": { "minViews": 100 }
+    }
+  ],
+  "ingestToken": "",
+  "publicUrl": "http://localhost:8787/",
+  "notify": {
+    "enabled": false,
+    "format": "wecom",
+    "webhook": "",
+    "minIntervalSeconds": 600,
+    "cooldownSeconds": 3600,
+    "rules": {
+      "dropRate": 0.3,
+      "spikeRate": 0.6,
+      "engagementChange": 0.25,
+      "viralTimes": 20,
+      "lowEffShare": 0.35
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "_说明": "复制本文件为 config.json 后修改。只有 adapter 对应的那几项需要填，其余留着不影响。",
+  "port": 8787,
+  "host": "0.0.0.0",
+  "adapter": "file",
+  "intervalSeconds": 300,
+  "daysBack": 2,
+  "ingestToken": "",
+  "publicUrl": "http://localhost:8787/",
+  "_notify": "24 小时值守告警：enabled 设为 true 并填 webhook，异常会推送到企业微信/钉钉/飞书群",
+  "notify": {
+    "enabled": false,
+    "format": "wecom",
+    "webhook": "",
+    "minIntervalSeconds": 600,
+    "cooldownSeconds": 3600,
+    "rules": {
+      "dropRate": 0.3,
+      "spikeRate": 0.6,
+      "engagementChange": 0.25,
+      "viralTimes": 20,
+      "lowEffShare": 0.35
+    }
+  },
+  "_adapter_file": "读取 realtime/data/inbox 下的 CSV/JSON 文件，或用 files 指定具体文件路径",
+  "inbox": "./data/inbox",
+  "files": [],
+  "_adapter_http": "第三方数据服务或你自己的接口；{date} {from} {to} {page} 会被自动替换",
+  "url": "https://your-data-service.example.com/api/works?date={date}&page={page}",
+  "itemsPath": "data.list",
+  "pages": 1,
+  "pageParam": "page",
+  "timeoutMs": 20000,
+  "_headers": "需要鉴权头时写成 {\"headers\": {\"Authorization\": \"Bearer 你的密钥\"}}；空值或没替换的占位符会被自动忽略",
+  "headers": {},
+  "_adapter_official": "官方开放平台：endpoints 请填你获批文档里的实际地址",
+  "endpoints": {
+    "token": "",
+    "list": ""
+  },
+  "method": "GET",
+  "pageSize": 50,
+  "credentials": {
+    "client_key": "",
+    "client_secret": "",
+    "access_token": ""
+  }
+}
