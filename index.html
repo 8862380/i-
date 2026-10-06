@@ -55,7 +55,8 @@
   .head{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;padding:6px 2px 16px}
   .brand{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:600;letter-spacing:.2px}
   .logo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:15px;background:linear-gradient(150deg,#4da3ff,#7c5cff);color:#fff}
-  .sub{color:var(--muted);font-size:12.5px;margin-top:6px}
+.sub{color:var(--muted);font-size:12.5px;margin-top:6px}
+.build-tag{font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:2px}
   .status{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:6px 13px}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(49,192,127,.16)}
   .dot.pause{background:var(--muted);box-shadow:none}
@@ -229,7 +230,7 @@
 <div class="app">
   <header class="head">
     <div>
-      <h1 class="brand"><span class="logo">◧</span>全平台内容数据监控台</h1>
+<h1 class="brand"><span class="logo">◧</span>全平台内容数据监控台<span class="build-tag" id="buildTag">v2.0 · 小账号版</span></h1>
       <p class="sub">抖音 · 快手 · 小红书 · 视频号 · B站 ｜ 24 小时采集真实数据，实时推送当日作品表现与异常预警</p>
     </div>
     <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">正在初始化…</span></div>
@@ -1444,7 +1445,7 @@
     var works = view ? view.cur.totals.works : 0;
     $('#statusText').textContent = '数据更新于 ' + clock + ' ｜ 当日作品 ' + fmtInt(works) + ' 条';
     $('#statusDot').className = 'dot' + (state.live ? '' : ' pause');
-    $('#footNote').textContent = '数据更新时间 ' + clock + ' ｜ 数据源：' + sourceLabel() + ' ｜ 口径：按作品发布小时聚合';
+$('#footNote').textContent = '数据更新时间 ' + clock + ' ｜ 数据源：' + sourceLabel() + ' ｜ 口径：按作品发布小时聚合';
     if (live.on) renderLiveStatus();
   }
 
