@@ -239,6 +239,11 @@
     <div class="field">
       <label class="label" for="dateInput">监控日期</label>
       <input type="date" id="dateInput" />
+      <div class="t-tools" style="margin-top:2px">
+        <button class="btn" type="button" data-day="0">今天</button>
+        <button class="btn" type="button" data-day="-1">昨天</button>
+        <button class="btn" type="button" data-day="-2">前天</button>
+      </div>
     </div>
     <div class="field grow">
       <span class="label">监控平台</span>
@@ -258,8 +263,9 @@
   </section>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="板块">
-    <button class="tab active" type="button" role="tab" data-tab="overview" aria-selected="true">总览</button>
-    <button class="tab" type="button" role="tab" data-tab="accounts" aria-selected="false">对标账号</button>
+<button class="tab active" type="button" role="tab" data-tab="overview" aria-selected="true">总览</button>
+<button class="tab" type="button" role="tab" data-tab="daily" aria-selected="false">每日数据</button>
+<button class="tab" type="button" role="tab" data-tab="accounts" aria-selected="false">对标账号</button>
     <button class="tab" type="button" role="tab" data-tab="tracks" aria-selected="false">赛道分析</button>
     <button class="tab" type="button" role="tab" data-tab="audience" aria-selected="false">人群与需求</button>
     <button class="tab" type="button" role="tab" data-tab="trends" aria-selected="false">平台热榜</button>
@@ -342,7 +348,41 @@
   </div>
   </section>
 
-  <!-- ============ 板块二：对标账号 ============ -->
+<!-- ============ 板块二：对标账号 ============ -->
+<!-- ============ 板块：每日数据（按天汇总，一眼看每天的真实数据） ============ -->
+<section class="tabpanel" id="panel-daily" hidden>
+  <div class="grid">
+    <section class="panel span3">
+      <div class="p-head">
+        <h2 class="p-title">每天的真实数据</h2>
+        <div class="t-tools">
+          <span class="p-note" id="dailyNote"></span>
+          <button class="btn" id="dailyToday" type="button">看今天</button>
+        </div>
+      </div>
+      <div class="hint" id="dailyHint"></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>日期</th><th class="num">作品数</th><th class="num">总播放</th><th class="num">点赞</th>
+              <th class="num">评论</th><th class="num">互动率</th><th class="num">爆款数</th>
+              <th class="num">账号数</th><th>当日最高播放作品</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="dailyBody"></tbody>
+        </table>
+      </div>
+      <div class="pager"><span class="pgtxt" id="dailyCount"></span></div>
+    </section>
+    <section class="panel span3">
+      <div class="p-head"><h2 class="p-title">每日走势</h2><span class="p-note">柱 = 当日总播放 ｜ 数字 = 当日作品数</span></div>
+      <div class="chart" id="chartDaily"></div>
+    </section>
+  </div>
+</section>
+
+<!-- ============ 板块二：对标账号 ============ -->
   <section class="tabpanel" id="panel-accounts" hidden>
     <div class="grid">
       <section class="panel span3">
@@ -424,7 +464,12 @@
     <section class="panel">
       <div class="p-head">
         <h2 class="p-title">平台热榜实时监控</h2>
-        <span class="p-note" id="trendNote"></span>
+        <div class="t-tools">
+          <select id="trendDay" aria-label="选择日期">
+            <option value="latest">最新（含名次变化）</option>
+          </select>
+          <span class="p-note" id="trendNote"></span>
+        </div>
       </div>
       <div class="hint" id="trendHint"></div>
       <div class="boards" id="trendBoards"></div>
@@ -1530,6 +1575,42 @@
     if (trackClose) trackClose.addEventListener('click', function () {
       document.getElementById('trackDetail').hidden = true;
     });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-day]'), function (b) {
+      b.addEventListener('click', function () {
+        var off = Number(b.getAttribute('data-day')) || 0;
+        state.date = dateKey(addDays(new Date(), off));
+        state.dateAuto = false;
+        state.page = 1;
+        $('#dateInput').value = state.date;
+        renderAll();
+        if (live.on) liveResync();
+      });
+    });
+    var dailyToday = document.getElementById('dailyToday');
+    if (dailyToday) dailyToday.addEventListener('click', function () {
+      state.date = dateKey(new Date());
+      state.dateAuto = true;
+      state.page = 1;
+      $('#dateInput').value = state.date;
+      renderAll();
+      if (live.on) liveResync();
+    });
+    var dailyBody = document.getElementById('dailyBody');
+    if (dailyBody) dailyBody.addEventListener('click', function (ev) {
+      var link = ev.target.closest ? ev.target.closest('[data-day-jump]') : null;
+      if (!link) return;
+      ev.preventDefault();
+      state.date = link.getAttribute('data-day-jump');
+      state.dateAuto = false;
+      state.page = 1;
+      $('#dateInput').value = state.date;
+      switchTab('overview');
+    });
+    var trendDay = document.getElementById('trendDay');
+    if (trendDay) trendDay.addEventListener('change', function () {
+      trendState.day = this.value;
+      renderTrends();
+    });
     $('#dateInput').value = state.date;
     $('#dateInput').addEventListener('change', function () {
       state.date = this.value || dateKey(new Date());
@@ -1680,6 +1761,107 @@
   }
 
   /* ---------- 对标账号 ---------- */
+  /* ---------- 每日数据：按天汇总，每天进来先看这里 ---------- */
+  var dailyState = { days: [] };
+  var dailyRow = function (d) {
+    var today = dateKey(new Date());
+    var top = d.list[0];
+    return '<tr' + (d.date === today ? ' style="background:rgba(77,163,255,.07)"' : '') + '>' +
+      '<td>' + d.date + (d.date === today ? ' <span class="tbadge new">今天</span>' : '') + '</td>' +
+      '<td class="num">' + d.works + '</td>' +
+      '<td class="num">' + fmtNum(d.views) + '</td>' +
+      '<td class="num">' + fmtNum(d.likes) + '</td>' +
+      '<td class="num">' + fmtNum(d.comments) + '</td>' +
+      '<td class="num">' + fmtPct(d.engagement) + '</td>' +
+      '<td class="num">' + d.hits + '</td>' +
+      '<td class="num">' + d.authorCount + '</td>' +
+      '<td><div class="w-title" title="' + (top ? String(top.title).replace(/"/g, '&quot;') : '') + '">' +
+      (top ? top.title + ' <span class="mini">' + fmtNum(top.views) + '</span>' : '—') + '</div></td>' +
+      '<td><button class="btn" type="button" data-day-jump="' + d.date + '">查看这天</button></td>' +
+      '</tr>';
+  };
+  function buildDaily(works) {
+    var map = {}, globalMedian = medianOf(works.map(function (w) { return w.views; })) || 1;
+    var hitLine = globalMedian * 5;
+    works.forEach(function (w) {
+      var o = map[w.dateKey] || (map[w.dateKey] = {
+        date: w.dateKey, works: 0, views: 0, likes: 0, comments: 0, shares: 0, collects: 0,
+        viewList: [], authors: {}, list: [], hitLine: hitLine
+      });
+      o.works++;
+      o.views += w.views; o.likes += w.likes; o.comments += w.comments;
+      o.shares += w.shares; o.collects += w.collects;
+      o.viewList.push(w.views);
+      o.authors[accountKeyOf(w)] = 1;
+      o.list.push(w);
+    });
+    return Object.keys(map).map(function (k) {
+      var o = map[k];
+      o.engagement = o.views ? (o.likes + o.comments + o.shares + o.collects) / o.views : 0;
+      o.medianViews = medianOf(o.viewList);
+      o.hits = o.viewList.filter(function (v) { return v >= hitLine; }).length;
+      o.authorCount = Object.keys(o.authors).length;
+      o.list.sort(function (a, b) { return b.views - a.views; });
+      return o;
+    }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  }
+  function renderDaily() {
+    if (!view) return;
+    var works = analysisWorks();
+    var days = buildDaily(works);
+    dailyState.days = days;
+    var today = dateKey(new Date());
+    var todayRow = days.filter(function (d) { return d.date === today; })[0];
+    $('#dailyBody').innerHTML = days.map(dailyRow).join('') ||
+      '<tr><td colspan="10"><p class="empty">还没有按天数据，等采集跑一轮再看</p></td></tr>';
+    var span = analysisSpan(works);
+    $('#dailyCount').textContent = '共 ' + days.length + ' 天 ｜ 统计范围：' + span;
+    $('#dailyNote').textContent = days.length ? ('最早 ' + days[days.length - 1].date + ' ｜ 最新 ' + days[0].date) : '';
+    $('#dailyHint').innerHTML = '这里是<b>每一天的真实数据</b>：作品数、总播放、点赞、评论、互动率、爆款数、参与账号数，以及当天播放最高的一条。' +
+      (todayRow
+        ? '今天（' + today + '）已采集 <b>' + todayRow.works + '</b> 条作品、播放 <b>' + fmtNum(todayRow.views) +
+          '</b>，点右边的「查看这天」可以跳到当天明细。'
+        : '今天（' + today + '）还没有采到作品（第一轮采集还没跑到今天，或今天上游还没新内容）。') +
+      ' 数据每天自动累积，天数越多样本越准。';
+    drawDailyChart(days);
+  }
+  function drawDailyChart(days) {
+    var box = $('#chartDaily');
+    if (!box) return;
+    var list = days.slice(0, 21).slice().reverse();
+    if (!list.length) { box.innerHTML = '<p class="empty">暂无数据</p>'; return; }
+    var w = Math.max(320, box.clientWidth || 900), h = 260;
+    var pad = { t: 24, r: 16, b: 34, l: 62 };
+    var iw = Math.max(40, w - pad.l - pad.r), ih = Math.max(40, h - pad.t - pad.b);
+    var maxV = Math.max.apply(null, list.map(function (d) { return d.views; })) || 1;
+    var maxW = Math.max.apply(null, list.map(function (d) { return d.works; })) || 1;
+    var step = iw / list.length;
+    var bw = Math.min(46, step * 0.62);
+    var out = ['<svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="每日播放量与作品数">'];
+    out.push('<title>每日总播放量与作品数</title>');
+    for (var g = 0; g <= 3; g++) {
+      var gv = maxV / 3 * g, gy = pad.t + ih - (gv / maxV) * ih;
+      out.push('<line x1="' + pad.l + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.l + iw) + '" y2="' + gy.toFixed(1) + '" stroke="var(--grid)" stroke-width="1" />');
+      out.push('<text x="' + (pad.l - 8) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="end" fill="var(--muted)" font-size="11">' + fmtNum(gv) + '</text>');
+    }
+    list.forEach(function (d, i) {
+      var x = pad.l + i * step + (step - bw) / 2;
+      var bh = (d.views / maxV) * ih;
+      var isToday = d.date === dateKey(new Date());
+      out.push('<rect x="' + x.toFixed(1) + '" y="' + (pad.t + ih - bh).toFixed(1) + '" width="' + bw.toFixed(1) +
+        '" height="' + Math.max(1, bh).toFixed(1) + '" rx="3" fill="' + (isToday ? 'var(--warn)' : 'var(--accent)') + '"' +
+        (isToday ? '' : ' fill-opacity="0.6"') + '><title>' + d.date + '：' + fmtNum(d.views) + ' 播放，' + d.works + ' 条作品</title></rect>');
+      out.push('<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (pad.t + ih - bh - 6).toFixed(1) + '" text-anchor="middle" fill="var(--muted)" font-size="10.5">' + d.works + '</text>');
+      if (list.length <= 14 || i % 2 === 0) {
+        out.push('<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (pad.t + ih + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="11">' + d.date.slice(5) + '</text>');
+      }
+    });
+    out.push('<text x="' + (pad.l + iw / 2) + '" y="' + (h - 4) + '" text-anchor="middle" fill="var(--muted)" font-size="11">日期（柱高=当日总播放，柱上数字=当日作品数）</text>');
+    out.push('</svg>');
+    box.innerHTML = out.join('');
+    void maxW;
+  }
+
   function buildAccounts(works) {
     var map = {}, globalMedian = medianOf(works.map(function (w) { return w.views; }));
     var hitLine = globalMedian * 5;
@@ -2197,6 +2379,7 @@
 
   function renderAnalysis() {
     if (!view) return;
+    renderDaily();
     renderAccounts();
     renderTracks();
     renderDemand();
@@ -2221,13 +2404,23 @@
     var box = document.getElementById('trendBoards');
     if (!box) return;
     var data = trendState.data;
-    if (!data || !data.platforms || !data.platforms.length) {
+    var day = trendState.day || 'latest';
+    var hist = trendState.history;
+    var boards = null;
+    if (day !== 'latest' && hist && hist.platforms) {
+      boards = hist.platforms.map(function (p) {
+        var d = (p.days || []).filter(function (x) { return x.date === day; })[0];
+        return d ? { platform: p.platform, listKey: 'hot', capturedAt: d.capturedAt, historical: true, items: d.items } : null;
+      }).filter(Boolean);
+    }
+    if (!boards) boards = data && data.platforms ? data.platforms : [];
+    if (!boards.length) {
       box.innerHTML = '<p class="empty">还没有热榜数据。用 realtime\\start.bat 启动采集服务（配置里带 trends 才会采热榜），或等 GitHub Actions 跑完第一轮。</p>';
       document.getElementById('trendNote').textContent = '';
       document.getElementById('trendHint').innerHTML = '';
       return;
     }
-    var list = data.platforms.slice().sort(function (a, b) {
+    var list = boards.slice().sort(function (a, b) {
       return (TREND_ORDER[a.platform] == null ? 5 : TREND_ORDER[a.platform]) -
         (TREND_ORDER[b.platform] == null ? 5 : TREND_ORDER[b.platform]);
     });
@@ -2244,7 +2437,9 @@
         '<span class="pdot" style="background:' + ((P[p.platform] && P[p.platform].color) || 'var(--accent)') + '"></span>' +
         (TREND_NAME[p.platform] || p.platform) + '热榜' +
         '</div><div class="board-meta">' + (when ? pad2(when.getHours()) + ':' + pad2(when.getMinutes()) + ' 采集' : '') +
-        ' ｜ ' + items.length + ' 条 ｜ 新上榜 ' + fresh + ' ｜ 上升 ' + up + ' ｜ 下降 ' + down + '</div></div>';
+        ' ｜ ' + items.length + ' 条' +
+        (p.historical ? ' ｜ 历史快照（当天最后一次采集，无位次对比）'
+          : (' ｜ 新上榜 ' + fresh + ' ｜ 上升 ' + up + ' ｜ 下降 ' + down)) + '</div></div>';
       var rows = items.map(function (it) {
         var first = it.firstSeen ? fmtDuration((Date.now() - it.firstSeen) / 1000) : '—';
         var delta = (it.prevHot != null && it.hot != null) ? (it.hot - it.prevHot) : null;
@@ -2254,8 +2449,9 @@
           '<div class="trank">' + it.rank + '</div>' +
           '<div class="ttitle"><span class="tn" title="' + String(it.title).replace(/"/g, '&quot;') + '">' +
           (it.url ? '<a class="linkish" href="' + it.url + '" target="_blank" rel="noopener">' + it.title + '</a>' : it.title) +
-          '</span><span class="tmeta"><span>最高第 ' + (it.bestRank || it.rank) + ' 名</span>' +
-          '<span>上榜 ' + first + '</span>' + (deltaTxt ? '<span>' + deltaTxt + '</span>' : '') + '</span></div>' +
+          '</span><span class="tmeta">' + (p.historical ? '' :
+            '<span>最高第 ' + (it.bestRank || it.rank) + ' 名</span><span>上榜 ' + first + '</span>') +
+          (deltaTxt ? '<span>' + deltaTxt + '</span>' : '') + '</span></div>' +
           '<div class="thot">' + fmtNum(it.hot) + trendChangeBadge(it) + '</div>' +
           '</div>';
       }).join('');
@@ -2264,13 +2460,31 @@
     box.innerHTML = html;
     var whenAll = data.generatedAt ? new Date(data.generatedAt) : null;
     document.getElementById('trendNote').textContent = whenAll
-      ? '最近采集 ' + pad2(whenAll.getHours()) + ':' + pad2(whenAll.getMinutes()) + ' ｜ 每轮自动对比上一轮排名'
+      ? (day === 'latest'
+        ? '最近采集 ' + pad2(whenAll.getHours()) + ':' + pad2(whenAll.getMinutes()) + ' ｜ 每轮自动对比上一轮排名'
+        : '查看 ' + day + ' 的热榜快照')
       : '';
     document.getElementById('trendHint').innerHTML =
       '这里是<b>抖音、快手官方公开热榜</b>的真实数据（词条 + 热度值），每轮采集都会和上一轮对比：' +
       '<b>新上榜</b>是最新冲进榜单的、<b>↑/↓</b> 是名次变化、热度增量反映话题正在升温还是退潮。' +
       '当前共 ' + totalItems + ' 条词条，本轮新上榜 <b>' + totalNew + '</b> 条、上升 <b>' + totalUp + '</b> 条、下降 <b>' + totalDown + '</b> 条。' +
+      (trendState.history && trendState.history.platforms.some(function (p) { return (p.days || []).length > 1; })
+        ? ' 右上角可以切换到<b>过去某一天</b>，回看当天的热榜。' : '') +
       '抖音、快手的作品级数据（播放/点赞）需要开放平台授权，拿到密钥后按 README 配置即可并入「总览 / 赛道」板块；B站作品数据已经在那些板块里。';
+  }
+  function fillTrendDays() {
+    var sel = document.getElementById('trendDay');
+    if (!sel) return;
+    var days = {};
+    ((trendState.history && trendState.history.platforms) || []).forEach(function (p) {
+      (p.days || []).forEach(function (d) { days[d.date] = 1; });
+    });
+    var keys = Object.keys(days).sort().reverse();
+    sel.innerHTML = '<option value="latest">最新（含名次变化）</option>' +
+      keys.map(function (k) {
+        return '<option value="' + k + '">' + k + (k === dateKey(new Date()) ? '（今天）' : '') + '</option>';
+      }).join('');
+    sel.value = trendState.day || 'latest';
   }
   function loadTrends() {
     var url = live.on ? 'api/trends' : 'data/trends.json';
@@ -2280,8 +2494,16 @@
         if (!json) return false;
         trendState.data = json;
         trendState.loadedAt = Date.now();
-        if (state.tab === 'trends') renderTrends();
-        return true;
+        var hurl = live.on ? 'api/trends?history=1' : 'data/trends-history.json';
+        return fetch(hurl + (hurl.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; })
+          .then(function (h) {
+            if (h) trendState.history = h;
+            fillTrendDays();
+            if (state.tab === 'trends') renderTrends();
+            return true;
+          });
       })
       .catch(function () { return false; });
   }
@@ -2293,7 +2515,7 @@
       b.classList[on ? 'add' : 'remove']('active');
       b.setAttribute('aria-selected', String(on));
     });
-    ['overview', 'accounts', 'tracks', 'audience', 'trends'].forEach(function (t) {
+    ['overview', 'daily', 'accounts', 'tracks', 'audience', 'trends'].forEach(function (t) {
       var p = document.getElementById('panel-' + t);
       if (p) p.hidden = (t !== name);
     });
@@ -2366,7 +2588,8 @@
   function liveResync() {
     if (!live.on) return Promise.resolve(0);
     var to = state.date;
-    var from = dateKey(addDays(parseKey(to), -1));
+    // 取最近 14 天：让「每日数据」「对标账号」「赛道」在实时模式下也有足够样本
+    var from = dateKey(addDays(parseKey(to), -13));
     return fetch('api/works?from=' + from + '&to=' + to, { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (json) {

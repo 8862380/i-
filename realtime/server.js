@@ -326,8 +326,19 @@ function writeStaticExport() {
   };
   fs.writeFileSync(path.join(STATIC_DIR, 'works.json'), JSON.stringify(works), 'utf8');
   var trends = trendsPayload(100);
+  // 热榜按天留存：每天最后一次快照，方便回看"昨天的抖音热榜"
+  var trendsHistory = {
+    generatedAt: Date.now(),
+    platforms: store.trendPlatforms().map(function (p) {
+      return { platform: p.platform, days: store.trendDays(p.platform, Date.now() - 30 * 86400000) };
+    })
+  };
   meta.trends = trends.platforms.map(function (p) { return { platform: p.platform, count: p.count, capturedAt: p.capturedAt }; });
+  meta.trendDays = trendsHistory.platforms.map(function (p) {
+    return { platform: p.platform, days: p.days.length };
+  });
   fs.writeFileSync(path.join(STATIC_DIR, 'trends.json'), JSON.stringify(trends), 'utf8');
+  fs.writeFileSync(path.join(STATIC_DIR, 'trends-history.json'), JSON.stringify(trendsHistory), 'utf8');
   fs.writeFileSync(path.join(STATIC_DIR, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
   log('已导出静态数据：' + works.length + ' 条作品（' + (meta.minDay || '—') + ' ~ ' + (meta.maxDay || '—') + '）→ data/works.json' +
     (meta.trends.length ? '，热榜 ' + meta.trends.map(function (t) { return t.platform + ' ' + t.count + ' 条'; }).join('、') : ''));
@@ -575,6 +586,14 @@ function handleApi(req, res, url) {
   if (p === '/api/trends' && req.method === 'GET') {
     var onlyPlatform = url.searchParams.get('platform') || '';
     var payload = trendsPayload(Number(url.searchParams.get('limit') || 100));
+    if (url.searchParams.get('history')) {
+      payload.history = {
+        generatedAt: Date.now(),
+        platforms: store.trendPlatforms().map(function (t) {
+          return { platform: t.platform, days: store.trendDays(t.platform, Date.now() - 30 * 86400000) };
+        })
+      };
+    }
     if (onlyPlatform) {
       payload.platforms = payload.platforms.filter(function (x) { return x.platform === onlyPlatform; });
     }

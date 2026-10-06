@@ -198,6 +198,26 @@ function openSqlite(file) {
           return { title: r.title, firstSeen: r.first_seen, bestRank: r.best_rank, peakHot: r.peak_hot, seen: r.seen };
         });
     },
+    /* 每天最后一次快照，用于"按天回看热榜" */
+    trendDays: function (platform, sinceTs) {
+      var times = db.prepare('SELECT captured_at FROM trend_snapshots WHERE platform = ? AND captured_at >= ? GROUP BY captured_at ORDER BY captured_at ASC')
+        .all(platform, sinceTs);
+      var lastOfDay = {};
+      times.forEach(function (t) {
+        var key = require('./normalize.js').keyOf(t.captured_at);
+        lastOfDay[key] = t.captured_at;
+      });
+      var itemsStmt = db.prepare('SELECT rank, title, hot_value, url FROM trend_snapshots WHERE platform = ? AND captured_at = ? ORDER BY rank ASC');
+      return Object.keys(lastOfDay).sort().reverse().map(function (day) {
+        var at = lastOfDay[day];
+        return {
+          date: day, capturedAt: at,
+          items: itemsStmt.all(platform, at).map(function (r) {
+            return { rank: r.rank, title: r.title, hot: r.hot_value, url: r.url };
+          })
+        };
+      });
+    },
     pruneTrends: function (beforeTs) {
       var info = db.prepare('DELETE FROM trend_snapshots WHERE captured_at < ?').run(beforeTs);
       return info && info.changes ? info.changes : 0;
@@ -346,6 +366,21 @@ function openJson(dir) {
         });
       });
       return Object.keys(agg).map(function (k) { return agg[k]; });
+    },
+    trendDays: function (platform, sinceTs) {
+      var lastOfDay = {};
+      trends.forEach(function (s) {
+        if (s.platform !== platform || s.capturedAt < sinceTs) return;
+        var key = require('./normalize.js').keyOf(s.capturedAt);
+        if (!lastOfDay[key] || s.capturedAt > lastOfDay[key].capturedAt) lastOfDay[key] = s;
+      });
+      return Object.keys(lastOfDay).sort().reverse().map(function (day) {
+        var s = lastOfDay[day];
+        return {
+          date: day, capturedAt: s.capturedAt,
+          items: s.items.slice().sort(function (a, b) { return a.rank - b.rank; })
+        };
+      });
     },
     pruneTrends: function (beforeTs) {
       var before = trends.length;
