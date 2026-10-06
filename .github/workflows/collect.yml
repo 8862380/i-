@@ -53,14 +53,23 @@ jobs:
         run: |
           git config user.name  "media-monitor-bot"
           git config user.email "media-monitor-bot@users.noreply.github.com"
-          git add data/works.json data/meta.json
+          # 热榜文件也要一起提交，否则线上热榜永远停在初始版本
+          git add -A data/
           if git diff --cached --quiet; then
             echo "数据没有变化，跳过提交"
-          else
-            COUNT=$(node -e "console.log(require('./data/meta.json').count)")
-            git commit -m "data: 更新采集数据（${COUNT} 条作品）"
-            if ! git push; then
-              echo "::error::提交数据失败。请到仓库 Settings → Actions → General → Workflow permissions 选择 Read and write permissions，然后重新运行本工作流。"
-              exit 1
-            fi
+            exit 0
           fi
+          COUNT=$(node -e "console.log(require('./data/meta.json').count)")
+          git commit -m "data: 更新采集数据（${COUNT} 条作品）"
+          # 其他推送（例如手动更新代码）可能同时落到 main，冲突时先 rebase 再重试
+          for i in 1 2 3 4; do
+            if git push; then
+              echo "✓ 数据已提交回仓库（第 ${i} 次尝试）"
+              exit 0
+            fi
+            echo "推送被拒绝，拉取远端后重试（第 ${i} 次）"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || true
+            sleep 5
+          done
+          echo "::error::数据推送失败。请确认 Settings → Actions → General → Workflow permissions 已选 Read and write permissions。"
+          exit 1
