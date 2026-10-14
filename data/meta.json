@@ -1,12 +1,12 @@
 {
-  "generatedAt": 1791964666860,
-  "generatedAtText": "2026-10-14T07:57:46.860Z",
+  "generatedAt": 1791985041847,
+  "generatedAtText": "2026-10-14T13:37:21.848Z",
   "days": 7,
-  "count": 1263,
+  "count": 1340,
   "adapter": "http（8 个源）",
   "adapterDesc": "多源拉取：B站热门视频 + B站全站排行 + B站最新投稿 + B站·知识科技最新 + B站·游戏最新 + B站·舞蹈最新 + B站·时尚最新 + B站·资讯最新",
   "configSource": "config.all.json",
-  "lastPollAt": 1791964634720,
+  "lastPollAt": 1791985009957,
   "lastOk": true,
   "lastError": "",
   "minDay": "2026-10-08",
@@ -15,7 +15,7 @@
     {
       "platform": "douyin",
       "count": 50,
-      "capturedAt": 1791964634720
+      "capturedAt": 1791985009957
     }
   ],
   "trendDays": [
