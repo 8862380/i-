@@ -1,12 +1,12 @@
 {
-  "generatedAt": 1793489823709,
-  "generatedAtText": "2026-10-31T23:37:03.709Z",
+  "generatedAt": 1793511522720,
+  "generatedAtText": "2026-11-01T05:38:42.720Z",
   "days": 7,
-  "count": 1395,
+  "count": 1485,
   "adapter": "http（8 个源）",
   "adapterDesc": "多源拉取：B站热门视频 + B站全站排行 + B站最新投稿 + B站·知识科技最新 + B站·游戏最新 + B站·舞蹈最新 + B站·时尚最新 + B站·资讯最新",
   "configSource": "config.all.json",
-  "lastPollAt": 1793489792133,
+  "lastPollAt": 1793511498048,
   "lastOk": true,
   "lastError": "",
   "minDay": "2026-10-26",
@@ -15,12 +15,21 @@
     {
       "platform": "douyin",
       "count": 50,
-      "capturedAt": 1793489792133
+      "capturedAt": 1793511498048
+    },
+    {
+      "platform": "kuaishou",
+      "count": 46,
+      "capturedAt": 1793511498048
     }
   ],
   "trendDays": [
     {
       "platform": "douyin",
+      "days": 1
+    },
+    {
+      "platform": "kuaishou",
       "days": 1
     }
   ]
